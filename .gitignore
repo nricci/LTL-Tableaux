@@ -1,0 +1,9 @@
+src/parser/Parser.hs
+src/parser/Lexer.hs
+src/parser/Grammar.info
+
+output
+build
+main
+
+.DS_Store
