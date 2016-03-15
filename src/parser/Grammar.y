@@ -29,9 +29,10 @@ import LTL
     'var' { TokenVar $$ }
 
 %left ';'
-%nonassoc 'U' 'W' 'X' 'G' 'F'
+%left 'U' 'W'
 %left '->' '==' '!='
 %left '&&' '||'
+%left 'G' 'F' 'X'
 %left '!'
 
 %%

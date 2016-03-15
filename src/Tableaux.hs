@@ -82,7 +82,7 @@ blocks (OrNode s) = S.map AndNode $ closure s
 tiles :: Node -> Set Node
 tiles (AndNode s) = let x = S.map chopX (S.filter isX s) in
 						if (S.null x) then
-							S.empty
+							S.singleton (OrNode S.empty)
 						else
 							S.singleton (OrNode x)
 					
@@ -96,11 +96,11 @@ expand_node n t@(Tableaux root nodes rel) = case n of
 																	nodes' = nodes `S.union` S.fromList succs
 																	rel' = rel `R.union` R.fromList [(n,succ) | succ <- succs]
 												AndNode s -> case succs of
-																[] ->	(t, S.empty) --(Tableaux root nodes' rel', S.singleton dummy)
+																[] ->	error "should not get here" --(Tableaux root nodes' rel', S.singleton dummy)
 																		--	where
-																		--	dummy = (OrNode s)
-																		--	nodes' = dummy `S.insert` nodes
-																		--	rel' = rel `R.union` R.fromList [(n,dummy), (dummy,n)]
+																		--		dummy = (OrNode S.empty)
+																		--		nodes' = dummy `S.insert` nodes
+																		--		rel' = rel `R.union` R.fromList [(n,dummy), (dummy,n)]
 																x:_ -> (Tableaux root nodes' rel', S.empty)
 																			where 
 																				nodes' = nodes `S.union` S.fromList succs
@@ -130,16 +130,16 @@ do_tableaux t = do_tableaux_impl S.empty t
 
 --------------------------}			
 
-{-
+
 delete_node :: Node -> Tableaux -> Tableaux
 delete_node n t@(Tableaux root nodes rel) = case n of
 										(AndNode _) -> Tableaux root nodes' rel'
 										(OrNode _) -> S.fold delete_node (Tableaux root nodes' rel') (predecesors t n)
 
 		where
-			rel' = R.fromList $ filter (\(x,y) -> x /= n && y /= n) $ R.toList rel --nodes' R.<| rel R.|> nodes'
+			rel' = R.fromList $ filter (\(x,y) -> x /= n && y /= n) $ R.toList rel -- Highly Ineficient
 			nodes' = nodes S.\\ nn			
-			nn = S.singleton n 
+			nn = trace ("deleting " ++ show n) S.singleton n 
 
 delete_nodes :: Set Node -> Tableaux -> Tableaux
 delete_nodes s t = S.fold delete_node t s
@@ -168,90 +168,90 @@ delete_or t = let to_delete = S.filter (\n -> isOr n && S.null (succesors t n)) 
 
 
 
-checkEU :: Tableaux -> Node -> Formula -> Bool
-checkEU t n f = let val = fromJust $ M.lookup n (tagmap t f) in
-					val /= pinf && val /= ninf-- checkEU_impl t n f S.empty
+check_eventuality :: Tableaux -> Node -> Formula -> Bool
+check_eventuality t n f = distance /= pinf
+	
+	where
+		distance = fromJust $ M.lookup n (tagmap t f)
+
+	
 
 
-checkEU_impl :: Tableaux -> Node -> Formula -> Set Node -> Bool
-checkEU_impl t n@(OrNode s) f@(E (U g h)) v = S.some (\m -> checkEU_impl t m f v) ((succesors t n) `S.difference` v)
-checkEU_impl t n@(AndNode s) f@(E (U g h)) v = if S.member h s then 
-													True
-												else
-													S.member g s && S.some (\m -> checkEU_impl t m f (n `S.insert` v)) ((succesors t n) `S.difference` v)
-
-
-delete_EU :: Tableaux -> Tableaux
-delete_EU t = let eus = [(n,f) | n <- S.toList $ nodes t, f <- S.toList $ formulas n, isEU f] in
-				let to_delete0 = filter (\(m,g) -> not (checkEU t m g)) eus in
-					let to_delete1 = map fst to_delete0 in 
-						foldl (flip delete_node) t to_delete1
-
-
-
-
-checkAU :: Tableaux -> Node -> Formula -> Bool
-checkAU t n f = let val = fromJust $ M.lookup n (tagmap t f) in
-					val /= pinf && val /= ninf --checkAU_impl t n f S.empty
-
-
-checkAU_impl :: Tableaux -> Node -> Formula -> Set Node -> Bool
-checkAU_impl t n@(OrNode s) f@(A (U g h)) v = S.some (\m -> checkAU_impl t m f (n `S.insert` v)) ((succesors t n) `S.difference` v)
-checkAU_impl t n@(AndNode s) f@(A (U g h)) v = if S.member h s then 
-													True
-												else
-													S.member g s && S.all (\m -> checkAU_impl t m f (n `S.insert` v)) ((succesors t n) `S.difference` v)
-
-delete_AU :: Tableaux -> Tableaux
-delete_AU t = let aus = [(n,f) | n <- S.toList $ nodes t, f <- S.toList $ formulas n, isAU f] in
-				let to_delete0 = {-(trace ("aus = " ++ show aus)) -} filter (\(m,g) -> not (checkAU t m g)) aus in
-					let to_delete1 = map fst to_delete0 in 
-						foldl (flip delete_node) t to_delete1
+delete_non_event :: Tableaux -> Tableaux
+delete_non_event t = foldl (flip delete_node) t to_delete1
+	
+	where
+		to_delete1 = map fst to_delete0
+		to_delete0 = filter (\(m,g) -> not (check_eventuality t m g)) candidates
+		candidates = [(n,f) | n <- S.toList $ nodes t, f <- S.toList $ formulas n, isEventuality f]
+				
 
 
 
 deletion_rules :: Tableaux -> Tableaux
-deletion_rules = delete_EU . delete_AU . delete_or . delete_unreachable . delete_inconsistent 
+deletion_rules = delete_non_event . delete_or . delete_unreachable . delete_inconsistent 
 
 
 refine_tableaux :: Tableaux -> Tableaux
 refine_tableaux t = let t' = deletion_rules t in
 						if t' == t then t else refine_tableaux t'
 
--}
-
-refine_tableaux :: Tableaux -> Tableaux
-refine_tableaux t = t
 
 
 
+{-- BACKREACH --}
+
+reach :: Tableaux -> Node -> Formula -> Formula -> Bool
+reach t n TrueConst g = reach_future t n g S.empty
+reach t n f g = reach_until t n f g S.empty
+
+reach_until :: Tableaux -> Node -> Formula -> Formula -> Set Node -> Bool
+reach_until t n f g s = if S.member n s then
+							False
+						else
+							if S.member g (formulas n) then 
+								True
+							else
+								if S.member f (formulas n) then
+									S.some (\n' -> reach_until t n' f g (s S.<+ n)) (succesors t n)
+								else
+									False 
+
+reach_future :: Tableaux -> Node -> Formula -> Set Node -> Bool
+reach_future t n g s = if S.member n s then
+							False
+						else
+							if S.member g (formulas n) then 
+								True
+							else
+								S.some (\n' -> reach_future t n' g (s S.<+ n)) (succesors t n)
+							 
 
 
 
-{-------------------------  TAGGING  ---------------------------}
+
+
+{-------------------------  TAGGING  --------------------------}
 
 -- AUX
 pinf :: Int
 pinf = 2^29-1
 
-ninf :: Int
-ninf = -2^29
--------
-{-
+
 init_tag :: Tableaux -> Formula -> Map Node Int
-init_tag t g@(A (U f h)) = M.fromList $ l0 ++ linf
+init_tag t g@(U f h) = M.fromList $ l0 ++ linf
 	
 	where
 		l0 = [(n,0) | n <- goal_nodes]
 		linf = [(n,pinf) | n <- (S.toList $ nodes t) \\ goal_nodes]
 		goal_nodes = [n | n <- S.toList $ nodes t, S.member h $ formulas n]
 
-init_tag t g@(E (U f h)) = M.fromList $ l0 ++ linf
+init_tag t g@(F f) = M.fromList $ l0 ++ linf
 	
 	where
 		l0 = [(n,0) | n <- goal_nodes]
 		linf = [(n,pinf) | n <- (S.toList $ nodes t) \\ goal_nodes]
-		goal_nodes = [n | n <- S.toList $ nodes t, S.member h $ formulas n]		
+		goal_nodes = [n | n <- S.toList $ nodes t, S.member f $ formulas n]		
 
 
 
@@ -260,19 +260,19 @@ evolve_tag t g m = foldl (new_tag t g) m $ M.keys m
 
 
 new_tag :: Tableaux -> Formula -> Map Node Int -> Node -> Map Node Int
-new_tag t g@(A (U f h)) m n@(AndNode s) = 	if S.member g s && S.member f s && fromJust (M.lookup n m) == pinf && S.all (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
-												M.insert n (1 + (S.findMax $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n))) m
-											else
-												m
-new_tag t g@(A (U f h)) m n@(OrNode s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
-												M.insert n (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n)) m
-											else
-												m
-new_tag t g@(E (U f h)) m n@(AndNode s) = 	if S.member g s && S.member f s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+new_tag t g@(U f h) m n@(AndNode s) = 	if S.member g s && S.member f s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
 												M.insert n (1 + (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n))) m
 											else
 												m
-new_tag t g@(E (U f h)) m n@(OrNode s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+new_tag t g@(U f h) m n@(OrNode s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+												M.insert n (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n)) m
+											else
+												m
+new_tag t g@(F f) m n@(AndNode s) = 	if S.member g s && (not $ S.member f s) && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+												M.insert n (1 + (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n))) m
+											else
+												m
+new_tag t g@(F f) m n@(OrNode s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
 												M.insert n (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n)) m
 											else
 												m
@@ -287,11 +287,6 @@ compute_tag t g m = let m' = evolve_tag t g m in
 
 tagmap ::  Tableaux -> Formula -> Map Node Int
 tagmap t g = iterate (compute_tag t g) (init_tag t g) !! (S.size . nodes $ t)
-
-
-
-
--}
 
 
 

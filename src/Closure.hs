@@ -122,15 +122,10 @@ dup xs = null [(i, j) | i <- [0 .. length xs P.- 1], j <- [0 .. length xs P.- 1]
 
 
 closure :: Set Formula -> Set (Set Formula)
-closure f = old_closure f
-
-
-
-{--	S.fromList $ map formulas (cl_impl (filter consistent [make_cls s]) [])		
-	where
-		cost = (show $ foldl ((*)) 1 x) ++ " - " ++ (show x) 
-		x = map brrk (S.toList s)
---}
+closure f = old_closure f --S.fromList $ map formulas (cl_impl (filter consistent [make_cls f]) [])		
+	--where
+	--	cost = (show $ foldl ((*)) 1 x) ++ " - " ++ (show x) 
+	--	x = map brrk (S.toList s)
 
 
 

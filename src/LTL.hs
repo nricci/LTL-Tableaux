@@ -72,7 +72,10 @@ chopX :: Formula -> Formula
 chopX (X f) = f
 chopX f = f
 
-
+isEventuality :: Formula -> Bool
+isEventuality (U _ _) = True
+isEventuality (F _) = True
+isEventuality _ = False
 
 
 
