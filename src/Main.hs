@@ -14,6 +14,8 @@ import Debug.Trace
 import qualified Model as Model
 import Model (Model)
 
+import Data.Time.Clock 
+
 
 main = do {
 	args <- getArgs;
@@ -22,6 +24,7 @@ main = do {
 
 
 run_tableaux = \path -> do {
+	start_time <- getCurrentTime;
 	str <- readFile path;
 	spec <- return $ S.fromList $ parseSpecification str;
 	putStrLn ("Specification Successfully Parsed (" ++ (show (S.size spec)) ++ " formulas).");
@@ -37,7 +40,9 @@ run_tableaux = \path -> do {
 			putStrLn ("Extracting model.")
 			writeFile "output/model.dot" (Model.model2dot $ Model.flatten $ model t2)
 	else
-		putStrLn ("The specification is inconsistent.")
+		putStrLn ("The specification is inconsistent.");
+	end_time <- getCurrentTime;	
+	putStrLn $ "time elapsed: " ++ show (diffUTCTime end_time start_time) 
 }
 
 

@@ -140,7 +140,10 @@ delete_node n t@(Tableaux root nodes rel) = case n of
 										(OrNode _) -> S.fold delete_node (Tableaux root nodes' rel') (predecesors t n)
 
 		where
-			rel' = R.fromList $ filter (\(x,y) -> x /= n && y /= n) $ R.toList rel -- Highly Ineficient
+			--rel' = R.fromList $ filter (\(x,y) -> x /= n && y /= n) $ R.toList rel -- Highly Ineficient
+			rel' = foldl (flip $ uncurry R.delete) rel (delete_succ ++ delete_pre)
+			delete_pre = [(x,n) | x <- S.toList $ predecesors t n]
+			delete_succ = [(n,x) | x <- S.toList $ succesors t n]
 			nodes' = nodes S.\\ nn			
 			nn = S.singleton n 
 
