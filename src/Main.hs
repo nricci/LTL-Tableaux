@@ -11,6 +11,9 @@ import qualified SetAux as S
 
 import Debug.Trace
 
+import qualified Model as Model
+import Model (Model)
+
 
 main = do {
 	args <- getArgs;
@@ -30,7 +33,9 @@ run_tableaux = \path -> do {
 	t2 <- return $ refine_tableaux t;
 	putStrLn ("done (" ++ (show $ S.size $ nodes t2 ) ++ " nodes).");
 	if S.member (root t2) (nodes t2) then
-			writeFile "output/tableaux.dot" (tab2dot t2);
+		do 	writeFile "output/tableaux.dot" (tab2dot t2)
+			putStrLn ("Extracting model.")
+			writeFile "output/model.dot" (Model.model2dot $ Model.flatten $ model t2)
 	else
 		putStrLn ("The specification is inconsistent.")
 }

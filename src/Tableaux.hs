@@ -21,6 +21,9 @@ import Data.Ord
 
 import Debug.Trace
 
+import qualified Model
+import Model (Model)
+
 
 
 
@@ -139,7 +142,7 @@ delete_node n t@(Tableaux root nodes rel) = case n of
 		where
 			rel' = R.fromList $ filter (\(x,y) -> x /= n && y /= n) $ R.toList rel -- Highly Ineficient
 			nodes' = nodes S.\\ nn			
-			nn = trace ("deleting " ++ show n) S.singleton n 
+			nn = S.singleton n 
 
 delete_nodes :: Set Node -> Tableaux -> Tableaux
 delete_nodes s t = S.fold delete_node t s
@@ -198,34 +201,6 @@ refine_tableaux t = let t' = deletion_rules t in
 
 
 
-
-{-- BACKREACH --}
-
-reach :: Tableaux -> Node -> Formula -> Formula -> Bool
-reach t n TrueConst g = reach_future t n g S.empty
-reach t n f g = reach_until t n f g S.empty
-
-reach_until :: Tableaux -> Node -> Formula -> Formula -> Set Node -> Bool
-reach_until t n f g s = if S.member n s then
-							False
-						else
-							if S.member g (formulas n) then 
-								True
-							else
-								if S.member f (formulas n) then
-									S.some (\n' -> reach_until t n' f g (s S.<+ n)) (succesors t n)
-								else
-									False 
-
-reach_future :: Tableaux -> Node -> Formula -> Set Node -> Bool
-reach_future t n g s = if S.member n s then
-							False
-						else
-							if S.member g (formulas n) then 
-								True
-							else
-								S.some (\n' -> reach_future t n' g (s S.<+ n)) (succesors t n)
-							 
 
 
 
@@ -287,6 +262,167 @@ compute_tag t g m = let m' = evolve_tag t g m in
 
 tagmap ::  Tableaux -> Formula -> Map Node Int
 tagmap t g = iterate (compute_tag t g) (init_tag t g) !! (S.size . nodes $ t)
+
+
+
+
+
+
+{-------------------------  DAGS  ---------------------------}
+
+dag :: Tableaux -> Node -> Formula -> Tableaux
+dag t n@(AndNode _) f@(U g h) = build_dag t (tagmap t f) $ init_dag n
+dag t n@(AndNode _) f@(F g) = build_dag t (tagmap t f) $ init_dag n
+dag t n@(OrNode _) f = error ("dag called with OrNode : " ++ (show n) ++ "and formula f : " ++ (show f)) 
+
+init_dag = \n -> Tableaux n (S.singleton n) R.empty
+
+
+--build_dagU :: Tableaux -> Map Node Int -> Tableaux -> Tableaux
+--build_dagU t m dag  = 	if stop then 
+--							dag 
+--						else
+--							build_dagAU t m $ S.fold (flip $ treat_dag_node t m) dag (frontier dag)
+--
+--	where stop = S.all (\x -> fromJust (M.lookup x m) == 0 && isAnd x) $ frontier dag
+
+
+build_dag :: Tableaux -> Map Node Int -> Tableaux -> Tableaux
+build_dag t m dag  = 	if stop then 
+							dag 
+						else
+							build_dag t m $ treat_dag_node t m dag pick
+
+	where 
+		stop = S.some (\x -> fromJust (M.lookup x m) == 0 && isAnd x) $ frontier dag
+		pick = fst . head $ sortBy (comparing snd) (filter (\p -> S.member (fst p) (frontier dag)) (M.toList m))
+
+
+treat_dag_node :: Tableaux -> Map Node Int -> Tableaux -> Node -> Tableaux
+treat_dag_node t@(Tableaux r ns rel) m dag@(Tableaux dr dns drel) n@(OrNode _) = let c = fst . head $ candidates in
+																					Tableaux dr (dns S.<+ c) (R.insert n c drel)
+	where 
+		candidates = sortBy (comparing snd) (filter (\p -> S.member (fst p) (succesors t n)) (M.toList m))
+
+treat_dag_node t@(Tableaux r ns rel) m dag@(Tableaux dr dns drel) n@(AndNode _) = Tableaux dr ns' rel'
+																					where
+																						succs = S.toList (succesors t n)
+																						ns' = dns `S.union` S.fromList succs
+																						rel' = drel `R.union` R.fromList [(n,succ) | succ <- succs]
+
+
+
+
+
+tab_to_model :: Int -> Tableaux -> Model
+tab_to_model k t@(Tableaux r ns rel) = Model.Model (trans r) (S.fromList mnodes) new_rel
+
+	where
+		new_rel = (R.map trans ((S.fromList) tnodes R.<| (rel R.* rel) R.|> (S.fromList tnodes))) 
+		trans = \tn -> fromJust $ M.lookup tn tmmap
+		tmmap = M.fromList $ zip tnodes mnodes 	
+		mnodes = map (\p -> Model.Node (fst p) (formulas $ snd p)) (zip [k..] tnodes)
+		tnodes = S.toList $ S.filter isAnd $ nodes t
+
+
+{-------------------------  FRAG  ---------------------------}
+
+
+
+
+frag :: Int -> Tableaux -> Node -> Model
+frag k t n@(AndNode _) = 	if null eventualities then 
+					tab_to_model k $ build_frag_noeven t n
+				else	
+					build_frag  (k+k') t (tail eventualities) initm 
+
+	where 
+		k' = Model.size initm
+		initm = tab_to_model k $ (dag t n (head eventualities))
+		eventualities = S.toList $ S.filter (\f -> isEventuality f) (formulas n)
+
+
+
+build_frag_noeven :: Tableaux -> Node -> Tableaux
+build_frag_noeven t n@(AndNode _) = result
+
+	where
+		result = Tableaux n new_nodes new_rel
+		new_rel = R.fromList $ [(n,l1) | l1 <- S.toList $ level1] ++ [(l1,l2) | l1 <- S.toList $ level1, l2 <- S.toList $ level2, R.member l1 l2 (rel t)] --new_nodes R.<| (rel t) R.|> new_nodes
+		new_nodes = level1 S.+ level2 S.<+ n	
+		level2 = S.map (fromJust . S.pick) $ S.map (succesors t) level1
+		level1 = succesors t n
+
+
+
+build_frag :: Int -> Tableaux -> [Formula] -> Model -> Model
+build_frag k t [] mres = mres
+build_frag k t (f:fs) mres = build_frag (k+k') t fs mres3
+
+	where 
+		k' = Model.size dg
+		mres3 = Model.paste mres2 mn dg (Model.root dg)
+		dg = tab_to_model k $ (dag t c f)
+		c = find_and t mn
+		mn = fromJust $ S.pick $ Model.frontier mres2 ---((trace $ "mres2 --------------- \n\n " ++ show mres2)  mres2)
+		mres2 = Model.identifyFrontier mres ---((trace $ "mres -------------------- \n\n " ++ show mres)  mres)
+
+
+find_and :: Tableaux -> Model.Node -> Node
+find_and t nm = fromJust $ S.pick $ S.filter (\n -> isAnd n && formulas n == Model.formulas nm) (nodes t)
+
+
+
+
+
+
+{-------------------   MODEL  -----------------------}
+
+
+
+
+model :: Tableaux -> Model
+model t = build_model k fr (S.toList $ Model.frontier $ init_model) t init_model	
+
+	where
+		fr = S.singleton (choose_and, Model.root init_model)
+		k = Model.size init_model
+		init_model = frag 0 t choose_and
+		choose_and = fromJust $ S.pick $ succesors t (root t) 
+
+
+build_model :: Int -> Set (Node, Model.Node) -> [Model.Node] -> Tableaux -> Model -> Model
+build_model k froots [] t mres = mres
+build_model k froots (mn:mns) t mres = case da_one of
+										(Just pair) -> build_model k froots (mns) t  new_model_just
+										Nothing -> build_model (k'+1) (froots S.<+ (c,mn)) new_front t new_model_noth						
+
+	where
+		new_front = S.toList $  Model.frontier $ new_model_noth
+		k' = k + Model.size da_frag
+		new_model_noth = Model.paste mres mn da_frag (Model.root da_frag) 
+		da_frag = frag (k+1) t c
+		c = (find_and t mn)
+		new_model_just = let p = (mn, snd $ fromJust $ da_one) in Model.identify mres p --- (trace ("p = " ++ (show p) ++ " " ++ (show $ fst p == snd p)) p)
+		da_one = S.pick $ S.filter (\p -> fst p == find_and t mn {-&& notElem (snd p) (mn:mns)-}) froots 
+		---trrr = trace $ "Current model ----------------------\n" ++ show mres
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
