@@ -31,11 +31,11 @@ data Formula = 	And Formula Formula
 
 
 instance Show Formula where
-	show (And p q) 	=	show p ++ " && " ++ show q
-	show (Or p q) 	=	show p ++ " || " ++ show q 
-	show (If p q)	=	show p ++ " -> " ++ show q 
-	show (Iff p q) 	=	show p ++ " == " ++ show q
-	show (Xor p q) 	=	show p ++ " != " ++ show q
+	show (And p q) 	=	"("++show p ++ " && " ++ show q ++")"
+	show (Or p q) 	=	"("++show p ++ " || " ++ show q ++")"
+	show (If p q)	=	"("++show p ++ " -> " ++ show q ++")"
+	show (Iff p q) 	=	"("++show p ++ " == " ++ show q ++")"
+	show (Xor p q) 	=	"("++show p ++ " != " ++ show q ++")"
 	show (Not p)		=	"!" ++ show p
 	show (U p q) 	=	"(" ++ show p ++ " U " ++ show q ++ ")"
 	show (W p q) 	=	"(" ++ show p ++ " W " ++ show q ++ ")"
@@ -43,8 +43,8 @@ instance Show Formula where
 	show (G p) 	=	"G (" ++ show p ++ ")"
 	show (F p)	=	"F (" ++ show p ++ ")"
 	show (Prop s) 	= 	s	
-	show TrueConst 	= 	"true"
-	show FalseConst	= 	"false"
+	show TrueConst 	= 	"True"
+	show FalseConst	= 	"False"
 	 
 
 
@@ -113,6 +113,7 @@ break_rule (If p q)		=	[[negate p],[q]]
 break_rule (Iff p q)	=	[[negate p, negate q],[p,q]]
 break_rule (Xor p q)	=	[[negate p, q],[p, negate q]]
 -- Temporal
+break_rule (W p q)	=	[[q, Or p (X (W p q))]]	
 break_rule (U p q)	=	[[q],[p, X (U p q)]]	
 break_rule (G p)	=	[[p, X (G p)]]
 break_rule (F p )	=	[[p],[X (F p)]]

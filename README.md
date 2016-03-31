@@ -12,7 +12,7 @@ To use the tool do the following:
 
 1. Compile
 
-        ghc -XNPlusKPatterns -isrc -outputdir build -o main src/Main.hs
+        ghc -XNPlusKPatterns -isrc:src/util:src/parser -outputdir build -o main src/Main.hs
 
 2. Run the tool    
 
