@@ -28,21 +28,21 @@ import Model (Model)
 
 
 
-data Node 	= 	OrNode {formulas :: Set Formula} 
-			|	AndNode {formulas :: Set Formula} 
+data Node 	= 	PreState {formulas :: Set Formula} 
+			|	State {formulas :: Set Formula} 
 			deriving (Eq, Ord)
 
 instance Show Node where
-	show (AndNode s) = "<AndNode " ++ show (S.toList s) ++ ">"
-	show (OrNode s) = "<OrNode " ++ show (S.toList s) ++ ">"
+	show (State s) = "<State " ++ show (S.toList s) ++ ">"
+	show (PreState s) = "<PreState " ++ show (S.toList s) ++ ">"
 
 
 isOr :: Node -> Bool
-isOr (OrNode _) = True
+isOr (PreState _) = True
 isOr _ = False
 
 isAnd :: Node -> Bool
-isAnd (AndNode _) = True
+isAnd (State _) = True
 isAnd _ = False
 
 
@@ -71,7 +71,7 @@ predecesors t n = case R.lookupRan n $ rel t of
 
 
 make_tableaux :: Set Formula -> Tableaux
-make_tableaux s = let root = OrNode s in 
+make_tableaux s = let root = PreState s in 
 					Tableaux root (S.singleton root) R.empty
 
 frontier :: Tableaux -> Set Node
@@ -79,29 +79,29 @@ frontier t = nodes t S.\\ (R.dom . rel) t
 
 
 blocks :: Node -> Set Node
-blocks (OrNode s) = S.map AndNode $ closure s
+blocks (PreState s) = S.map State $ closure s
 
 
 tiles :: Node -> Set Node
-tiles (AndNode s) = let x = S.map chopX (S.filter isX s) in
+tiles (State s) = let x = S.map chopX (S.filter isX s) in
 						if (S.null x) then
-							S.singleton (OrNode S.empty)
+							S.singleton (PreState S.empty)
 						else
-							S.singleton (OrNode x)
+							S.singleton (PreState x)
 					
 
 
 expand_node :: Node -> Tableaux -> (Tableaux, Set Node)
 expand_node n t@(Tableaux root nodes rel) = case n of
-												OrNode _ ->	(Tableaux root nodes' rel', S.empty)
+												PreState _ ->	(Tableaux root nodes' rel', S.empty)
 																where
 																	succs = S.toList (blocks n)
 																	nodes' = nodes `S.union` S.fromList succs
 																	rel' = rel `R.union` R.fromList [(n,succ) | succ <- succs]
-												AndNode s -> case succs of
+												State s -> case succs of
 																[] ->	error "should not get here" --(Tableaux root nodes' rel', S.singleton dummy)
 																		--	where
-																		--		dummy = (OrNode S.empty)
+																		--		dummy = (PreState S.empty)
 																		--		nodes' = dummy `S.insert` nodes
 																		--		rel' = rel `R.union` R.fromList [(n,dummy), (dummy,n)]
 																x:_ -> (Tableaux root nodes' rel', S.empty)
@@ -136,8 +136,8 @@ do_tableaux t = do_tableaux_impl S.empty t
 
 delete_node :: Node -> Tableaux -> Tableaux
 delete_node n t@(Tableaux root nodes rel) = case n of
-										(AndNode _) -> Tableaux root nodes' rel'
-										(OrNode _) -> S.fold delete_node (Tableaux root nodes' rel') (predecesors t n)
+										(State _) -> Tableaux root nodes' rel'
+										(PreState _) -> S.fold delete_node (Tableaux root nodes' rel') (predecesors t n)
 
 		where
 			--rel' = R.fromList $ filter (\(x,y) -> x /= n && y /= n) $ R.toList rel -- Highly Ineficient
@@ -156,8 +156,8 @@ delete_inconsistent t = let inc = S.filter inconsistent_node $ nodes t in
 
 
 inconsistent_node :: Node -> Bool
-inconsistent_node (AndNode s) = inconsistent s
-inconsistent_node (OrNode s) = inconsistent s
+inconsistent_node (State s) = inconsistent s
+inconsistent_node (PreState s) = inconsistent s
 
 
 
@@ -238,19 +238,19 @@ evolve_tag t g m = foldl (new_tag t g) m $ M.keys m
 
 
 new_tag :: Tableaux -> Formula -> Map Node Int -> Node -> Map Node Int
-new_tag t g@(U f h) m n@(AndNode s) = 	if S.member g s && S.member f s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+new_tag t g@(U f h) m n@(State s) = 	if S.member g s && S.member f s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
 												M.insert n (1 + (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n))) m
 											else
 												m
-new_tag t g@(U f h) m n@(OrNode s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+new_tag t g@(U f h) m n@(PreState s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
 												M.insert n (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n)) m
 											else
 												m
-new_tag t g@(F f) m n@(AndNode s) = 	if S.member g s && (not $ S.member f s) && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+new_tag t g@(F f) m n@(State s) = 	if S.member g s && (not $ S.member f s) && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
 												M.insert n (1 + (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n))) m
 											else
 												m
-new_tag t g@(F f) m n@(OrNode s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
+new_tag t g@(F f) m n@(PreState s) = 	if S.member g s && fromJust (M.lookup n m) == pinf && S.some (\x -> fromJust (M.lookup x m) < pinf) (succesors t n) then
 												M.insert n (S.findMin $ S.map (\x -> fromJust (M.lookup x m)) (succesors t n)) m
 											else
 												m
@@ -274,9 +274,9 @@ tagmap t g = iterate (compute_tag t g) (init_tag t g) !! (S.size . nodes $ t)
 {-------------------------  DAGS  ---------------------------}
 
 dag :: Tableaux -> Node -> Formula -> Tableaux
-dag t n@(AndNode _) f@(U g h) = build_dag t (tagmap t f) $ init_dag n
-dag t n@(AndNode _) f@(F g) = build_dag t (tagmap t f) $ init_dag n
-dag t n@(OrNode _) f = error ("dag called with OrNode : " ++ (show n) ++ "and formula f : " ++ (show f)) 
+dag t n@(State _) f@(U g h) = build_dag t (tagmap t f) $ init_dag n
+dag t n@(State _) f@(F g) = build_dag t (tagmap t f) $ init_dag n
+dag t n@(PreState _) f = error ("dag called with PreState : " ++ (show n) ++ "and formula f : " ++ (show f)) 
 
 init_dag = \n -> Tableaux n (S.singleton n) R.empty
 
@@ -302,12 +302,12 @@ build_dag t m dag  = 	if stop then
 
 
 treat_dag_node :: Tableaux -> Map Node Int -> Tableaux -> Node -> Tableaux
-treat_dag_node t@(Tableaux r ns rel) m dag@(Tableaux dr dns drel) n@(OrNode _) = let c = fst . head $ candidates in
+treat_dag_node t@(Tableaux r ns rel) m dag@(Tableaux dr dns drel) n@(PreState _) = let c = fst . head $ candidates in
 																					Tableaux dr (dns S.<+ c) (R.insert n c drel)
 	where 
 		candidates = sortBy (comparing snd) (filter (\p -> S.member (fst p) (succesors t n)) (M.toList m))
 
-treat_dag_node t@(Tableaux r ns rel) m dag@(Tableaux dr dns drel) n@(AndNode _) = Tableaux dr ns' rel'
+treat_dag_node t@(Tableaux r ns rel) m dag@(Tableaux dr dns drel) n@(State _) = Tableaux dr ns' rel'
 																					where
 																						succs = S.toList (succesors t n)
 																						ns' = dns `S.union` S.fromList succs
@@ -334,7 +334,7 @@ tab_to_model k t@(Tableaux r ns rel) = Model.Model (trans r) (S.fromList mnodes)
 
 
 frag :: Int -> Tableaux -> Node -> Model
-frag k t n@(AndNode _) = 	if null eventualities then 
+frag k t n@(State _) = 	if null eventualities then 
 					tab_to_model k $ build_frag_noeven t n
 				else	
 					build_frag  (k+k') t (tail eventualities) initm 
@@ -347,7 +347,7 @@ frag k t n@(AndNode _) = 	if null eventualities then
 
 
 build_frag_noeven :: Tableaux -> Node -> Tableaux
-build_frag_noeven t n@(AndNode _) = result
+build_frag_noeven t n@(State _) = result
 
 	where
 		result = Tableaux n new_nodes new_rel
@@ -465,9 +465,9 @@ order_flas s = reverse $ sortBy (comparing length) (S.toList (S.map show selecti
 	where selection = s-- S.filter isLiteral s 	
 
 renderNode :: Map Node Int -> Node -> String
-renderNode num n@(OrNode s) = let label = foldr (+++) "" (order_flas s) in
+renderNode num n@(PreState s) = let label = foldr (+++) "" (order_flas s) in
 										"n" ++ show (num M.! n) ++ " [shape=circle, label=\"" ++ label ++ "\"];" 
-renderNode num n@(AndNode s) = let label = foldr (+++) "" (order_flas s) in
+renderNode num n@(State s) = let label = foldr (+++) "" (order_flas s) in
 										"n" ++ show (num M.! n) ++ " [shape=square, label=\"" ++ label ++ "\"];" 
 
 
@@ -495,9 +495,9 @@ tab2dotWithTags t@(Tableaux r nodes rel) m =  let num = numberNodes t in
 								++ "\n}"
 
 renderNodeWithTags :: (Show a) => Map Node Int -> Map Node a -> Node -> String
-renderNodeWithTags num tag n@(OrNode s) = let label = "tag = " ++ (show $ tag M.! n) ++ "\n" ++ foldr (+++) "" (order_flas s) in
+renderNodeWithTags num tag n@(PreState s) = let label = "tag = " ++ (show $ tag M.! n) ++ "\n" ++ foldr (+++) "" (order_flas s) in
 										"n" ++ show (num M.! n) ++ " [shape=circle, label=\"" ++ label ++ "\"];" 
-renderNodeWithTags num tag n@(AndNode s) = let label = "tag = " ++ (show $ tag M.! n) ++ "\n" ++ foldr (+++) "" (order_flas s) in
+renderNodeWithTags num tag n@(State s) = let label = "tag = " ++ (show $ tag M.! n) ++ "\n" ++ foldr (+++) "" (order_flas s) in
 										"n" ++ show (num M.! n) ++ " [shape=square, label=\"" ++ label ++ "\"];" 
 
 
