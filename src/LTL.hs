@@ -131,9 +131,14 @@ negate (If p q)		=	And p (negate q)
 negate (Iff p q)	=	Xor p q
 negate (Xor p q)	=	Iff p q
 negate (Prop p)		=	Not (Prop p)
-negate TrueConst 			=	FalseConst
-negate FalseConst 			=	TrueConst
-negate f@_ = error ("Not Implemented Yet" ++ show f)
+negate TrueConst 	=	FalseConst
+negate FalseConst	=	TrueConst
+negate (U p q) 		=	(p `And` negate q) `W` (negate p `And` negate q)
+negate (W p q) 		=	(p `And` negate q) `U` (negate p `And` negate q)
+negate (X p)		=	X $ negate p
+negate (G p)		=	F $ negate p
+negate (F p)		=	G $ negate p
+
 
 
 
