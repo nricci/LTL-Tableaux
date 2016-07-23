@@ -113,7 +113,7 @@ break_rule (If p q)		=	[[negate p],[q]]
 break_rule (Iff p q)	=	[[negate p, negate q],[p,q]]
 break_rule (Xor p q)	=	[[negate p, q],[p, negate q]]
 -- Temporal
-break_rule (W p q)	=	[[q, Or p (X (W p q))]]	
+break_rule (W p q)	=	[[q],[p, X (W p q)]]
 break_rule (U p q)	=	[[q],[p, X (U p q)]]	
 break_rule (G p)	=	[[p, X (G p)]]
 break_rule (F p )	=	[[p],[X (F p)]]
